@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createClient } from '@/utils/supabase/server'
 import { createClass, updateClassStatus } from './actions'
+import { getViewer } from '@/utils/auth/role'
 
 export default async function ClassesPage(props: {
   searchParams: Promise<{ error?: string; success?: string }>
@@ -10,6 +11,8 @@ export default async function ClassesPage(props: {
   const actionSuccess = searchParams.success
 
   const supabase = await createClient()
+  const viewer = await getViewer()
+  const isAdmin = viewer?.role === 'admin'
 
   const { data: locationsData } = await supabase
     .from('locations').select('id, name').eq('is_active', true).order('name', { ascending: true })
@@ -39,13 +42,13 @@ export default async function ClassesPage(props: {
         </div>
       )}
 
-      {/* Create Class */}
-      <section className="mb-12">
+      {/* Create Class (admin only) */}
+      {isAdmin && <section className="mb-12">
         <h2 className="text-xl font-semibold mb-4" style={{ color: 'var(--ft-text-primary)' }}>Create Class</h2>
         <div className="rounded-xl border p-6 md:p-8" style={{ backgroundColor: 'var(--ft-bg-elevated)', borderColor: 'var(--ft-border)' }}>
           <AddClassForm locations={locationsData || []} />
         </div>
-      </section>
+      </section>}
 
       {/* Classes list */}
       <section>
@@ -108,7 +111,7 @@ export default async function ClassesPage(props: {
                           >
                             Manage
                           </Link>
-                          <UpdateStatusForm classId={cls.id} currentStatus={cls.is_active} />
+                          {isAdmin && <UpdateStatusForm classId={cls.id} currentStatus={cls.is_active} />}
                         </div>
                       </td>
                     </tr>
