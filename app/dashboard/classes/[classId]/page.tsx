@@ -5,6 +5,7 @@ import { enrollStudent, removeStudent, assignTeacher, revokeTeacher } from './ac
 import { getViewer } from '@/utils/auth/role'
 import { LiveRefresh } from '../../LiveRefresh'
 import { ActivityBadge, formatActivityTime, type StudentActivity } from '../../ActivityBadge'
+import { ClassPolicyEditor } from './ClassPolicyEditor'
 
 export default async function ClassDetailPage(props: {
   params: Promise<{ classId: string }>
@@ -28,6 +29,7 @@ export default async function ClassDetailPage(props: {
     { data: candidateStudentsData },
     { data: candidateTeachersData },
     { data: activityData },
+    { data: policyData },
   ] = await Promise.all([
     supabase.from('classes').select('id, name, is_active, created_at, locations ( name )').eq('id', classId).single(),
     supabase.from('enrollments').select('student_id, profiles:student_id ( id, name, role )').eq('class_id', classId),
@@ -35,6 +37,7 @@ export default async function ClassDetailPage(props: {
     isAdmin ? supabase.from('profiles').select('id, name').eq('role', 'student').order('name', { ascending: true }) : empty,
     isAdmin ? supabase.from('profiles').select('id, name').eq('role', 'teacher').order('name', { ascending: true }) : empty,
     supabase.rpc('get_class_student_activity', { p_class_id: classId }),
+    supabase.rpc('get_class_policy', { p_class_id: classId }),
   ])
 
   if (classError || !classData) {
@@ -60,6 +63,18 @@ export default async function ClassDetailPage(props: {
   const locationName = (locRecord as { name?: string } | null)?.name || 'Unknown Location'
 
   const activityById = new Map(((activityData ?? []) as StudentActivity[]).map((a) => [a.student_id, a]))
+
+  const policyPayload = (policyData ?? {}) as {
+    version?: string | null
+    packages?: { package?: string | null; action?: string | null }[]
+  }
+  const blockedPackages = Array.isArray(policyPayload.packages)
+    ? policyPayload.packages
+        .filter((item) => item.action === 'BLOCK' && item.package)
+        .map((item) => item.package as string)
+        .sort()
+    : []
+  const policyVersion = policyPayload.version ?? null
 
   const enrolledStudentIds = new Set((enrollmentsData || []).map((e) => e.student_id))
   const activeStudentCount = (enrollmentsData || []).filter((e) => activityById.get(e.student_id)?.is_active).length
@@ -158,6 +173,33 @@ export default async function ClassDetailPage(props: {
             </table>
           </div>
         )}
+      </section>
+
+      {/* Device Policy Section */}
+      <section
+        className="rounded-xl border p-6 md:p-8 space-y-6"
+        style={{ backgroundColor: 'var(--ft-bg-elevated)', borderColor: 'var(--ft-border)' }}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3 pb-5 border-b" style={{ borderColor: 'var(--ft-border)' }}>
+          <div>
+            <h2 className="text-xl font-semibold" style={{ color: 'var(--ft-text-primary)' }}>Device Policy</h2>
+            <p className="text-xs mt-1.5" style={{ color: 'var(--ft-text-muted)' }}>
+              Choose the Android packages this class should block during an active FocusTag session.
+            </p>
+          </div>
+          <span
+            className="px-2.5 py-1 text-xs font-semibold rounded-full border"
+            style={{ backgroundColor: 'var(--ft-accent-muted)', borderColor: 'var(--ft-accent-border)', color: 'var(--ft-accent)' }}
+          >
+            {policyVersion ? 'Policy ' + policyVersion : 'No policy'}
+          </span>
+        </div>
+        <ClassPolicyEditor
+          classId={classId}
+          initialPackages={blockedPackages}
+          version={policyVersion}
+          canEdit={isAdmin}
+        />
       </section>
 
       {/* Students Section */}
