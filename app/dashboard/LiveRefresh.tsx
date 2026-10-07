@@ -4,46 +4,61 @@ import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 
+type LiveTable = 'profiles' | 'enrollments' | 'focus_sessions'
+
 /**
- * Keeps server-rendered dashboard data live: re-renders the current route
- * (router.refresh) when profiles / enrollments / focus_sessions change via
- * Supabase Realtime (RLS-filtered), plus a periodic fallback poll for rows
- * the viewer cannot receive over Realtime.
+ * Keeps a server-rendered section live. Mounted only on pages that show live
+ * data (Overview activity, class roster). Realtime changes (RLS-filtered) are
+ * coalesced into at most one router.refresh() per `minIntervalMs`; a slow
+ * fallback poll (visible tab only) covers rows the viewer can't receive over
+ * Realtime. No refresh on window focus.
  */
-export function LiveRefresh({ intervalMs = 30000 }: { intervalMs?: number }) {
+export function LiveRefresh({
+  tables = ['profiles', 'enrollments', 'focus_sessions'],
+  minIntervalMs = 4000,
+  pollMs = 60000,
+}: {
+  tables?: LiveTable[]
+  minIntervalMs?: number
+  pollMs?: number
+}) {
   const router = useRouter()
-  const pending = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastRefresh = useRef(0)
+  const tableKey = tables.join(',')
 
   useEffect(() => {
     const supabase = createClient()
-    const refresh = () => {
-      if (pending.current) return
-      pending.current = setTimeout(() => {
-        pending.current = null
-        router.refresh()
-      }, 500)
+    lastRefresh.current = Date.now()
+
+    const doRefresh = () => {
+      timer.current = null
+      lastRefresh.current = Date.now()
+      router.refresh()
+    }
+    // Leading-edge throttle with trailing call: never more than one refresh per window.
+    const schedule = () => {
+      if (timer.current) return
+      const wait = Math.max(0, lastRefresh.current + minIntervalMs - Date.now())
+      timer.current = setTimeout(doRefresh, Math.max(wait, 300))
     }
 
-    const channel = supabase
-      .channel('dashboard-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, refresh)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, refresh)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'focus_sessions' }, refresh)
-      .subscribe()
+    let channel = supabase.channel(`dashboard-live-${tableKey}`)
+    for (const table of tableKey.split(',')) {
+      channel = channel.on('postgres_changes', { event: '*', schema: 'public', table }, schedule)
+    }
+    channel.subscribe()
 
     const poll = setInterval(() => {
-      if (document.visibilityState === 'visible') router.refresh()
-    }, intervalMs)
-    const onFocus = () => router.refresh()
-    window.addEventListener('focus', onFocus)
+      if (document.visibilityState === 'visible' && Date.now() - lastRefresh.current >= pollMs) schedule()
+    }, pollMs)
 
     return () => {
       clearInterval(poll)
-      window.removeEventListener('focus', onFocus)
-      if (pending.current) clearTimeout(pending.current)
+      if (timer.current) clearTimeout(timer.current)
       supabase.removeChannel(channel)
     }
-  }, [router, intervalMs])
+  }, [router, tableKey, minIntervalMs, pollMs])
 
   return null
 }
