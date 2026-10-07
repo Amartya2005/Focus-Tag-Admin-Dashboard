@@ -29,5 +29,6 @@ export async function assignUserToInstitution(targetUserId: string) {
   }
 
   revalidatePath('/dashboard/students')
+  revalidatePath('/dashboard', 'layout')
   return { success: true, error: null }
 }

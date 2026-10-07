@@ -24,6 +24,7 @@ export async function enrollStudent(classId: string, studentId: string) {
 
   revalidatePath(`/dashboard/classes/${trimmedClassId}`)
   revalidatePath('/dashboard/classes')
+  revalidatePath('/dashboard', 'layout')
   return { success: true }
 }
 
@@ -48,6 +49,7 @@ export async function removeStudent(classId: string, studentId: string) {
 
   revalidatePath(`/dashboard/classes/${trimmedClassId}`)
   revalidatePath('/dashboard/classes')
+  revalidatePath('/dashboard', 'layout')
   return { success: true }
 }
 
@@ -72,6 +74,7 @@ export async function assignTeacher(classId: string, teacherId: string) {
 
   revalidatePath(`/dashboard/classes/${trimmedClassId}`)
   revalidatePath('/dashboard/classes')
+  revalidatePath('/dashboard', 'layout')
   return { success: true }
 }
 
@@ -96,5 +99,6 @@ export async function revokeTeacher(classId: string, teacherId: string) {
 
   revalidatePath(`/dashboard/classes/${trimmedClassId}`)
   revalidatePath('/dashboard/classes')
+  revalidatePath('/dashboard', 'layout')
   return { success: true }
 }
