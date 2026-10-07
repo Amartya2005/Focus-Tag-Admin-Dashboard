@@ -2,8 +2,10 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/utils/supabase/server'
+import { requireAdminAction, assertUuids, isUuid } from '@/utils/security/guard'
 
 export async function createClass(formData: FormData) {
+  await requireAdminAction()
   const name = String(formData.get('name') || '').trim()
   const locationId = String(formData.get('location_id') || '').trim()
 
@@ -11,7 +13,7 @@ export async function createClass(formData: FormData) {
     return { success: false, error: 'Name must be between 1 and 100 characters.' }
   }
 
-  if (!locationId) {
+  if (!isUuid(locationId)) {
     return { success: false, error: 'Location must be selected.' }
   }
 
@@ -32,6 +34,8 @@ export async function createClass(formData: FormData) {
 }
 
 export async function updateClassStatus(classId: string, isActive: boolean) {
+  await requireAdminAction()
+  assertUuids(classId)
   const supabase = await createClient()
 
   const { error } = await supabase.rpc('update_class_status', {

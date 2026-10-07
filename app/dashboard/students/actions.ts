@@ -2,8 +2,13 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/utils/supabase/server'
+import { requireAdminAction, assertUuids } from '@/utils/security/guard'
 
 export async function searchUnassignedUsers(searchTerm: string) {
+  await requireAdminAction()
+  if (typeof searchTerm !== 'string' || searchTerm.trim().length < 3 || searchTerm.length > 254) {
+    return { data: null, error: 'Search term must be 3-254 characters.' }
+  }
   const supabase = await createClient()
 
   const { data, error } = await supabase.rpc('search_unassigned_users', {
@@ -18,6 +23,8 @@ export async function searchUnassignedUsers(searchTerm: string) {
 }
 
 export async function assignUserToInstitution(targetUserId: string) {
+  await requireAdminAction()
+  assertUuids(targetUserId)
   const supabase = await createClient()
 
   const { error } = await supabase.rpc('assign_user_to_institution', {
