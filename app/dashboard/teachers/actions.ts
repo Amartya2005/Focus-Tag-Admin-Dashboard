@@ -16,6 +16,7 @@ export async function promoteStudentToTeacher(targetUserId: string) {
 
   revalidatePath('/dashboard/teachers')
   revalidatePath('/dashboard/students')
+  revalidatePath('/dashboard', 'layout')
   return { success: true, error: null }
 }
 
@@ -32,5 +33,6 @@ export async function demoteTeacherToStudent(targetUserId: string) {
 
   revalidatePath('/dashboard/teachers')
   revalidatePath('/dashboard/students')
+  revalidatePath('/dashboard', 'layout')
   return { success: true, error: null, removedCount: data as number }
 }

@@ -6,6 +6,10 @@ import { HeaderProfile } from './HeaderProfile'
 import { ThemeToggle } from './ThemeToggle'
 import { SidebarNav } from './SidebarNav'
 import { navForRole } from './nav-config'
+import { LiveRefresh } from './LiveRefresh'
+
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export default async function DashboardLayout({
   children,
@@ -55,6 +59,7 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex h-screen ft-bg ft-text-primary">
+      <LiveRefresh />
       <SidebarNav groups={navForRole(viewer.role)} roleLabel={roleLabel} footer={signOut} />
 
       {/* ── Main Content ── */}

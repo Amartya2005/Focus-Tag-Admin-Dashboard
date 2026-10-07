@@ -28,6 +28,7 @@ export async function createLocation(formData: FormData) {
   }
 
   revalidatePath('/dashboard/locations')
+  revalidatePath('/dashboard', 'layout')
   return { success: true, error: null }
 }
 
@@ -44,6 +45,7 @@ export async function deactivateLocation(locationId: string) {
   }
 
   revalidatePath('/dashboard/locations')
+  revalidatePath('/dashboard', 'layout')
   return { success: true, error: null }
 }
 
@@ -60,5 +62,6 @@ export async function reactivateLocation(locationId: string) {
   }
 
   revalidatePath('/dashboard/locations')
+  revalidatePath('/dashboard', 'layout')
   return { success: true, error: null }
 }

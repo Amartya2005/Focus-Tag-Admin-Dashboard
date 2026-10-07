@@ -27,6 +27,7 @@ export async function createClass(formData: FormData) {
   }
 
   revalidatePath('/dashboard/classes')
+  revalidatePath('/dashboard', 'layout')
   return { success: true, error: null }
 }
 
@@ -43,5 +44,6 @@ export async function updateClassStatus(classId: string, isActive: boolean) {
   }
 
   revalidatePath('/dashboard/classes')
+  revalidatePath('/dashboard', 'layout')
   return { success: true, error: null }
 }
