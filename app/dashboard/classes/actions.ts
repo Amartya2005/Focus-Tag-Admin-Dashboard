@@ -51,3 +51,44 @@ export async function updateClassStatus(classId: string, isActive: boolean) {
   revalidatePath('/dashboard', 'layout')
   return { success: true, error: null }
 }
+
+
+export async function saveClassPolicy(classId: string, packages: string[]) {
+  await requireAdminAction()
+  assertUuids(classId)
+
+  if (!Array.isArray(packages) || packages.length > 200) {
+    return { success: false, error: 'A class policy may contain at most 200 packages.' }
+  }
+
+  const normalized = Array.from(
+    new Set(
+      packages
+        .map((pkg) => String(pkg).trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  )
+
+  const invalid = normalized.find((pkg) => !/^[a-z0-9_][a-z0-9_.-]{0,127}$/.test(pkg))
+  if (invalid) {
+    return { success: false, error: `Invalid Android package name: ${invalid}` }
+  }
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('set_class_app_policy', {
+    p_class_id: classId,
+    p_packages: normalized,
+  })
+
+  if (error) {
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath(`/dashboard/classes/${classId}`)
+  revalidatePath('/dashboard')
+  return {
+    success: true,
+    error: null,
+    version: (data as { version?: string } | null)?.version ?? null,
+  }
+}
