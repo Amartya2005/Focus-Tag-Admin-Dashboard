@@ -1,17 +1,18 @@
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { getViewer } from '@/utils/auth/role'
+import { Suspense } from 'react'
 import { ActivityBadge, formatActivityTime } from './ActivityBadge'
+import { LiveRefresh } from './LiveRefresh'
+import { TableSkeleton } from './loading'
 
 export default async function DashboardPage() {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return null
-  const viewer = await getViewer()
-  const isAdmin = viewer?.role === 'admin'
+  const [supabase, viewer] = await Promise.all([createClient(), getViewer()])
+  if (!viewer) return null
+  const isAdmin = viewer.role === 'admin'
+  const headCount = (table: 'profiles' | 'classes' | 'locations' | 'nfc_tags') =>
+    supabase.from(table).select('id', { count: 'exact', head: true })
+  const none = Promise.resolve({ count: null as number | null })
 
   const [
     { count: studentsCount },
@@ -20,28 +21,19 @@ export default async function DashboardPage() {
     { count: locationsCount },
     { count: nfcTagsCount },
     { data: recentClasses },
-    { data: activityRows, error: activityError },
   ] = await Promise.all([
-    supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student'),
-    supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'teacher'),
-    supabase.from('classes').select('*', { count: 'exact', head: true }),
-    supabase.from('locations').select('*', { count: 'exact', head: true }),
-    supabase.from('nfc_tags').select('*', { count: 'exact', head: true }),
+    // Admin-only metrics are skipped entirely for teachers (cards are hidden).
+    isAdmin ? headCount('profiles').eq('role', 'student') : none,
+    isAdmin ? headCount('profiles').eq('role', 'teacher') : none,
+    headCount('classes'),
+    isAdmin ? headCount('locations') : none,
+    isAdmin ? headCount('nfc_tags') : none,
     supabase
       .from('classes')
       .select('id, name, is_active, locations ( name ), enrollments ( count ), teacher_class_access ( count )')
       .order('created_at', { ascending: false })
       .limit(4),
-    supabase.rpc('get_student_activity_summary'),
   ])
-
-  type ActivityRow = { student_id: string; name: string | null; is_active: boolean; active_since: string | null; last_activity_at: string | null }
-  const activity = ((activityRows ?? []) as ActivityRow[]).slice().sort((a, b) =>
-    Number(b.is_active) - Number(a.is_active) ||
-    (b.last_activity_at ?? '').localeCompare(a.last_activity_at ?? '')
-  )
-  const activeCount = activity.filter((a) => a.is_active).length
-  const inactiveCount = activity.length - activeCount
 
   return (
     <div className="w-full space-y-10">
@@ -74,58 +66,10 @@ export default async function DashboardPage() {
         } />}
       </div>
 
-
-      {/* Student activity */}
-      <section className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b" style={{ borderColor: 'var(--ft-border)' }}>
-          <div>
-            <h2 className="text-lg font-semibold" style={{ color: 'var(--ft-text-primary)' }}>Student Activity</h2>
-            <p className="text-xs mt-1" style={{ color: 'var(--ft-text-muted)' }}>
-              Active = currently in an open focus session (tap). Updates live.
-            </p>
-          </div>
-          <div className="flex items-center gap-2 text-xs font-semibold">
-            <span className="px-2.5 py-1 rounded-full border" style={{ backgroundColor: 'var(--ft-badge-active-bg)', borderColor: 'var(--ft-badge-active-border)', color: 'var(--ft-badge-active-text)' }}>
-              {activeCount} Active
-            </span>
-            <span className="px-2.5 py-1 rounded-full border" style={{ backgroundColor: 'var(--ft-badge-inactive-bg)', borderColor: 'var(--ft-badge-inactive-border)', color: 'var(--ft-badge-inactive-text)' }}>
-              {inactiveCount} Inactive
-            </span>
-          </div>
-        </div>
-        <div className="rounded-xl border overflow-hidden" style={{ backgroundColor: 'var(--ft-bg-elevated)', borderColor: 'var(--ft-border)' }}>
-          {activityError ? (
-            <div className="ft-error p-4 text-sm">Error loading activity: {activityError.message}</div>
-          ) : activity.length === 0 ? (
-            <div className="p-8 text-center text-sm" style={{ color: 'var(--ft-text-muted)' }}>
-              {isAdmin ? 'No students in this institution yet.' : 'No students enrolled in your classes yet.'}
-            </div>
-          ) : (
-            <div className="overflow-x-auto max-h-96">
-              <table className="w-full text-sm">
-                <thead style={{ backgroundColor: 'var(--ft-table-header-bg)', borderBottom: '1px solid var(--ft-table-divider)' }}>
-                  <tr>
-                    {['Student', 'Status', 'Last Activity'].map((h) => (
-                      <th key={h} className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--ft-text-muted)' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {activity.map((a, i) => (
-                    <tr key={a.student_id} className="ft-table-row-hover transition-colors" style={{ borderTop: i > 0 ? '1px solid var(--ft-table-divider)' : undefined }}>
-                      <td className="px-6 py-3 font-medium" style={{ color: 'var(--ft-text-primary)' }}>{a.name || a.student_id}</td>
-                      <td className="px-6 py-3"><ActivityBadge active={a.is_active} /></td>
-                      <td className="px-6 py-3 text-xs" style={{ color: 'var(--ft-text-secondary)' }}>
-                        {a.is_active ? `Since ${formatActivityTime(a.active_since)}` : formatActivityTime(a.last_activity_at)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </section>
+      {/* Student activity: streamed so metrics render without waiting on it */}
+      <Suspense fallback={<TableSkeleton />}>
+        <ActivitySection isAdmin={isAdmin} />
+      </Suspense>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Recent Classes */}
@@ -260,5 +204,72 @@ function MetricCard({ label, value, icon }: { label: string; value: number; icon
         {value}
       </div>
     </div>
+  )
+}
+
+async function ActivitySection({ isAdmin }: { isAdmin: boolean }) {
+  const supabase = await createClient()
+  const { data: activityRows, error: activityError } = await supabase.rpc('get_student_activity_summary')
+
+  type ActivityRow = { student_id: string; name: string | null; is_active: boolean; active_since: string | null; last_activity_at: string | null }
+  const activity = ((activityRows ?? []) as ActivityRow[]).slice().sort((a, b) =>
+    Number(b.is_active) - Number(a.is_active) ||
+    (b.last_activity_at ?? '').localeCompare(a.last_activity_at ?? '')
+  )
+  const activeCount = activity.filter((a) => a.is_active).length
+  const inactiveCount = activity.length - activeCount
+
+  return (
+    <section className="space-y-4">
+      <LiveRefresh tables={['profiles', 'enrollments', 'focus_sessions']} />
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b" style={{ borderColor: 'var(--ft-border)' }}>
+        <div>
+          <h2 className="text-lg font-semibold" style={{ color: 'var(--ft-text-primary)' }}>Student Activity</h2>
+          <p className="text-xs mt-1" style={{ color: 'var(--ft-text-muted)' }}>
+            Active = currently in an open focus session (tap). Updates live.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-xs font-semibold">
+          <span className="px-2.5 py-1 rounded-full border" style={{ backgroundColor: 'var(--ft-badge-active-bg)', borderColor: 'var(--ft-badge-active-border)', color: 'var(--ft-badge-active-text)' }}>
+            {activeCount} Active
+          </span>
+          <span className="px-2.5 py-1 rounded-full border" style={{ backgroundColor: 'var(--ft-badge-inactive-bg)', borderColor: 'var(--ft-badge-inactive-border)', color: 'var(--ft-badge-inactive-text)' }}>
+            {inactiveCount} Inactive
+          </span>
+        </div>
+      </div>
+      <div className="rounded-xl border overflow-hidden" style={{ backgroundColor: 'var(--ft-bg-elevated)', borderColor: 'var(--ft-border)' }}>
+        {activityError ? (
+          <div className="ft-error p-4 text-sm">Error loading activity: {activityError.message}</div>
+        ) : activity.length === 0 ? (
+          <div className="p-8 text-center text-sm" style={{ color: 'var(--ft-text-muted)' }}>
+            {isAdmin ? 'No students in this institution yet.' : 'No students enrolled in your classes yet.'}
+          </div>
+        ) : (
+          <div className="overflow-x-auto max-h-96">
+            <table className="w-full text-sm">
+              <thead style={{ backgroundColor: 'var(--ft-table-header-bg)', borderBottom: '1px solid var(--ft-table-divider)' }}>
+                <tr>
+                  {['Student', 'Status', 'Last Activity'].map((h) => (
+                    <th key={h} className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--ft-text-muted)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {activity.map((a, i) => (
+                  <tr key={a.student_id} className="ft-table-row-hover transition-colors" style={{ borderTop: i > 0 ? '1px solid var(--ft-table-divider)' : undefined }}>
+                    <td className="px-6 py-3 font-medium" style={{ color: 'var(--ft-text-primary)' }}>{a.name || a.student_id}</td>
+                    <td className="px-6 py-3"><ActivityBadge active={a.is_active} /></td>
+                    <td className="px-6 py-3 text-xs" style={{ color: 'var(--ft-text-secondary)' }}>
+                      {a.is_active ? `Since ${formatActivityTime(a.active_since)}` : formatActivityTime(a.last_activity_at)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </section>
   )
 }
