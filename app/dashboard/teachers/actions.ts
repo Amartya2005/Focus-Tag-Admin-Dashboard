@@ -2,8 +2,11 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/utils/supabase/server'
+import { requireAdminAction, assertUuids } from '@/utils/security/guard'
 
 export async function promoteStudentToTeacher(targetUserId: string) {
+  await requireAdminAction()
+  assertUuids(targetUserId)
   const supabase = await createClient()
 
   const { error } = await supabase.rpc('promote_student_to_teacher', {
@@ -21,6 +24,8 @@ export async function promoteStudentToTeacher(targetUserId: string) {
 }
 
 export async function demoteTeacherToStudent(targetUserId: string) {
+  await requireAdminAction()
+  assertUuids(targetUserId)
   const supabase = await createClient()
 
   const { data, error } = await supabase.rpc('demote_teacher_to_student', {

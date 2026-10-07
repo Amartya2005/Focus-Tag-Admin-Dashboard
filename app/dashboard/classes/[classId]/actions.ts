@@ -1,9 +1,12 @@
 'use server'
 
 import { createClient } from '@/utils/supabase/server'
+import { requireAdminAction, assertUuids } from '@/utils/security/guard'
 import { revalidatePath } from 'next/cache'
 
 export async function enrollStudent(classId: string, studentId: string) {
+  await requireAdminAction()
+  assertUuids(classId?.trim(), studentId?.trim())
   const supabase = await createClient()
 
   const trimmedClassId = classId?.trim()
@@ -29,6 +32,8 @@ export async function enrollStudent(classId: string, studentId: string) {
 }
 
 export async function removeStudent(classId: string, studentId: string) {
+  await requireAdminAction()
+  assertUuids(classId?.trim(), studentId?.trim())
   const supabase = await createClient()
 
   const trimmedClassId = classId?.trim()
@@ -54,6 +59,8 @@ export async function removeStudent(classId: string, studentId: string) {
 }
 
 export async function assignTeacher(classId: string, teacherId: string) {
+  await requireAdminAction()
+  assertUuids(classId?.trim(), teacherId?.trim())
   const supabase = await createClient()
 
   const trimmedClassId = classId?.trim()
@@ -79,6 +86,8 @@ export async function assignTeacher(classId: string, teacherId: string) {
 }
 
 export async function revokeTeacher(classId: string, teacherId: string) {
+  await requireAdminAction()
+  assertUuids(classId?.trim(), teacherId?.trim())
   const supabase = await createClient()
 
   const trimmedClassId = classId?.trim()

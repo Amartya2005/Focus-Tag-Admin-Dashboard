@@ -2,8 +2,10 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/utils/supabase/server'
+import { requireAdminAction, assertUuids } from '@/utils/security/guard'
 
 export async function createLocation(formData: FormData) {
+  await requireAdminAction()
   const name = String(formData.get('name') || '').trim()
   const type = String(formData.get('type') || '').trim()
 
@@ -33,6 +35,8 @@ export async function createLocation(formData: FormData) {
 }
 
 export async function deactivateLocation(locationId: string) {
+  await requireAdminAction()
+  assertUuids(locationId)
   const supabase = await createClient()
 
   // Use the backend-authoritative RPC
@@ -50,6 +54,8 @@ export async function deactivateLocation(locationId: string) {
 }
 
 export async function reactivateLocation(locationId: string) {
+  await requireAdminAction()
+  assertUuids(locationId)
   const supabase = await createClient()
 
   // Use the backend-authoritative RPC

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/utils/supabase/server'
+import { requireAdminAction, assertUuids, isUuid } from '@/utils/security/guard'
 
 // Returns a map of uid → has_sessions (boolean) for the given UIDs.
 // Uses the get_tag_session_status SECURITY DEFINER RPC — admin-only,
@@ -9,7 +10,9 @@ import { createClient } from '@/utils/supabase/server'
 export async function getTagSessionStatus(
   uids: string[],
 ): Promise<Record<string, boolean>> {
-  if (uids.length === 0) return {}
+  await requireAdminAction()
+  if (!Array.isArray(uids) || uids.length === 0) return {}
+  if (uids.length > 500 || !uids.every((u) => typeof u === 'string' && u.length <= 64)) return {}
   const supabase = await createClient()
 
   const { data, error } = await supabase.rpc('get_tag_session_status', {
@@ -34,6 +37,7 @@ export async function getTagSessionStatus(
 }
 
 export async function registerNfcTag(formData: FormData) {
+  await requireAdminAction()
   const uid = String(formData.get('uid') || '').trim().toUpperCase()
   const locationId = String(formData.get('location_id') || '').trim()
 
@@ -48,7 +52,7 @@ export async function registerNfcTag(formData: FormData) {
       error: 'Invalid UID format. Use uppercase hex bytes separated by colons (e.g. 1D:FF:7C:1C:1A:10:80).',
     }
   }
-  if (!locationId) {
+  if (!isUuid(locationId)) {
     return { success: false, error: 'Location is required.' }
   }
 
@@ -78,6 +82,8 @@ export async function registerNfcTag(formData: FormData) {
 }
 
 export async function deactivateNfcTag(tagId: string) {
+  await requireAdminAction()
+  assertUuids(tagId)
   const supabase = await createClient()
 
   const { error } = await supabase.rpc('deactivate_nfc_tag', {
@@ -93,6 +99,8 @@ export async function deactivateNfcTag(tagId: string) {
 }
 
 export async function reactivateNfcTag(tagId: string) {
+  await requireAdminAction()
+  assertUuids(tagId)
   const supabase = await createClient()
 
   const { error } = await supabase.rpc('reactivate_nfc_tag', {
@@ -108,6 +116,8 @@ export async function reactivateNfcTag(tagId: string) {
 }
 
 export async function reassignNfcTag(tagId: string, newLocationId: string) {
+  await requireAdminAction()
+  assertUuids(tagId, newLocationId)
   const supabase = await createClient()
 
   const { error } = await supabase.rpc('reassign_nfc_tag', {
@@ -124,6 +134,8 @@ export async function reassignNfcTag(tagId: string, newLocationId: string) {
 }
 
 export async function generateQrCredential(tagId: string) {
+  await requireAdminAction()
+  assertUuids(tagId)
   const supabase = await createClient()
   const { error } = await supabase.rpc('generate_qr_credential', { p_nfc_tag_id: tagId })
   if (error) return { success: false, error: error.message }
@@ -132,6 +144,8 @@ export async function generateQrCredential(tagId: string) {
 }
 
 export async function regenerateQrCredential(tagId: string) {
+  await requireAdminAction()
+  assertUuids(tagId)
   const supabase = await createClient()
   const { error } = await supabase.rpc('regenerate_qr_credential', { p_nfc_tag_id: tagId })
   if (error) return { success: false, error: error.message }
@@ -140,6 +154,8 @@ export async function regenerateQrCredential(tagId: string) {
 }
 
 export async function revokeQrCredential(credentialId: string) {
+  await requireAdminAction()
+  assertUuids(credentialId)
   const supabase = await createClient()
   const { error } = await supabase.rpc('revoke_qr_credential', { p_qr_credential_id: credentialId })
   if (error) return { success: false, error: error.message }
