@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { enrollStudent, removeStudent, assignTeacher, revokeTeacher } from './actions'
 import { getViewer } from '@/utils/auth/role'
+import { ActivityBadge, formatActivityTime, type StudentActivity } from '../../ActivityBadge'
 
 export default async function ClassDetailPage(props: {
   params: Promise<{ classId: string }>
@@ -57,7 +58,11 @@ export default async function ClassDetailPage(props: {
   const { data: candidateTeachersData } = await supabase
     .from('profiles').select('id, name').eq('role', 'teacher').order('name', { ascending: true })
 
+  const { data: activityData } = await supabase.rpc('get_class_student_activity', { p_class_id: classId })
+  const activityById = new Map(((activityData ?? []) as StudentActivity[]).map((a) => [a.student_id, a]))
+
   const enrolledStudentIds = new Set((enrollmentsData || []).map((e) => e.student_id))
+  const activeStudentCount = (enrollmentsData || []).filter((e) => activityById.get(e.student_id)?.is_active).length
   const assignedTeacherIds = new Set((teacherAccessData || []).map((t) => t.teacher_id))
 
   const availableStudents = (candidateStudentsData || []).filter((s) => !enrolledStudentIds.has(s.id))
@@ -156,14 +161,24 @@ export default async function ClassDetailPage(props: {
 
       {/* Students Section */}
       <section className="rounded-xl border p-6 md:p-8 space-y-6" style={{ backgroundColor: 'var(--ft-bg-elevated)', borderColor: 'var(--ft-border)' }}>
-        <div className="flex items-center justify-between pb-5 border-b" style={{ borderColor: 'var(--ft-border)' }}>
-          <div>
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-5 border-b" style={{ borderColor: 'var(--ft-border)' }}>
+          <div className="flex-1">
             <h2 className="text-xl font-semibold" style={{ color: 'var(--ft-text-primary)' }}>Enrolled Students</h2>
             <p className="text-xs mt-1.5" style={{ color: 'var(--ft-text-muted)' }}>Students officially registered in this class.</p>
           </div>
           <span className="px-2.5 py-1 text-xs font-semibold rounded-full border"
             style={{ backgroundColor: 'var(--ft-accent-muted)', borderColor: 'var(--ft-accent-border)', color: 'var(--ft-accent)' }}>
             {enrolledStudentIds.size} {enrolledStudentIds.size === 1 ? 'Student' : 'Students'}
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="px-2.5 py-1 text-xs font-semibold rounded-full border"
+              style={{ backgroundColor: 'var(--ft-badge-active-bg)', borderColor: 'var(--ft-badge-active-border)', color: 'var(--ft-badge-active-text)' }}>
+              {activeStudentCount} Active
+            </span>
+            <span className="px-2.5 py-1 text-xs font-semibold rounded-full border"
+              style={{ backgroundColor: 'var(--ft-badge-inactive-bg)', borderColor: 'var(--ft-badge-inactive-border)', color: 'var(--ft-badge-inactive-text)' }}>
+              {enrolledStudentIds.size - activeStudentCount} Inactive
+            </span>
           </span>
         </div>
 
@@ -189,8 +204,8 @@ export default async function ClassDetailPage(props: {
             <table className="w-full text-sm">
               <thead style={{ backgroundColor: 'var(--ft-table-header-bg)', borderBottom: '1px solid var(--ft-table-divider)' }}>
                 <tr>
-                  {['Student Name', 'ID', 'Action'].map((h, i) => (
-                    <th key={h} className={`px-6 py-4 text-xs font-semibold uppercase tracking-wider ${i === 2 ? 'text-right' : 'text-left'}`} style={{ color: 'var(--ft-text-muted)' }}>{h}</th>
+                  {['Student Name', 'ID', 'Status', 'Last Activity', 'Action'].map((h, i) => (
+                    <th key={h} className={`px-6 py-4 text-xs font-semibold uppercase tracking-wider ${i === 4 ? 'text-right' : 'text-left'}`} style={{ color: 'var(--ft-text-muted)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -198,10 +213,15 @@ export default async function ClassDetailPage(props: {
                 {enrollmentsData.map((item, i) => {
                   const profRec = Array.isArray(item.profiles) ? item.profiles[0] : item.profiles
                   const profileName = (profRec as { name?: string | null } | null)?.name || '—'
+                  const act = activityById.get(item.student_id)
                   return (
                     <tr key={item.student_id} className="ft-table-row-hover transition-colors" style={{ borderTop: i > 0 ? '1px solid var(--ft-table-divider)' : undefined }}>
                       <td className="px-6 py-4 font-medium" style={{ color: 'var(--ft-text-primary)' }}>{profileName}</td>
                       <td className="px-6 py-4 font-mono text-xs" style={{ color: 'var(--ft-text-muted)' }}>{item.student_id}</td>
+                      <td className="px-6 py-4"><ActivityBadge active={!!act?.is_active} /></td>
+                      <td className="px-6 py-4 text-xs" style={{ color: 'var(--ft-text-secondary)' }}>
+                        {act?.is_active ? `Since ${formatActivityTime(act.active_since)}` : formatActivityTime(act?.last_activity_at ?? null)}
+                      </td>
                       <td className="px-6 py-4 text-right">{isAdmin && <RemoveStudentForm classId={classId} studentId={item.student_id} />}</td>
                     </tr>
                   )
