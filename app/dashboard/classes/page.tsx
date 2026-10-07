@@ -10,17 +10,18 @@ export default async function ClassesPage(props: {
   const actionError = searchParams.error
   const actionSuccess = searchParams.success
 
-  const supabase = await createClient()
-  const viewer = await getViewer()
+  const [supabase, viewer] = await Promise.all([createClient(), getViewer()])
   const isAdmin = viewer?.role === 'admin'
 
-  const { data: locationsData } = await supabase
-    .from('locations').select('id, name').eq('is_active', true).order('name', { ascending: true })
-
-  const { data: classes, error: classesError } = await supabase
-    .from('classes')
-    .select('id, name, is_active, created_at, locations ( name ), enrollments ( count ), teacher_class_access ( count )')
-    .order('name', { ascending: true })
+  const [{ data: locationsData }, { data: classes, error: classesError }] = await Promise.all([
+    isAdmin
+      ? supabase.from('locations').select('id, name').eq('is_active', true).order('name', { ascending: true })
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    supabase
+      .from('classes')
+      .select('id, name, is_active, created_at, locations ( name ), enrollments ( count ), teacher_class_access ( count )')
+      .order('name', { ascending: true }),
+  ])
 
   return (
     <div className="max-w-6xl">

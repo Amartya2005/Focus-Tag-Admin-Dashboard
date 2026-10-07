@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { enrollStudent, removeStudent, assignTeacher, revokeTeacher } from './actions'
 import { getViewer } from '@/utils/auth/role'
+import { LiveRefresh } from '../../LiveRefresh'
 import { ActivityBadge, formatActivityTime, type StudentActivity } from '../../ActivityBadge'
 
 export default async function ClassDetailPage(props: {
@@ -14,15 +15,27 @@ export default async function ClassDetailPage(props: {
   const actionError = searchParams.error
   const actionSuccess = searchParams.success
 
-  const supabase = await createClient()
-  const viewer = await getViewer()
+  const [supabase, viewer] = await Promise.all([createClient(), getViewer()])
   const isAdmin = viewer?.role === 'admin'
 
-  const { data: classData, error: classError } = await supabase
-    .from('classes')
-    .select('id, name, is_active, created_at, locations ( name )')
-    .eq('id', classId)
-    .single()
+  // All reads are independent: one parallel round trip instead of six sequential ones.
+  // Candidate lists are only needed by admins (enroll / assign forms).
+  const empty = Promise.resolve({ data: [] as { id: string; name: string | null }[] })
+  const [
+    { data: classData, error: classError },
+    { data: enrollmentsData, error: enrollmentsError },
+    { data: teacherAccessData, error: teacherAccessError },
+    { data: candidateStudentsData },
+    { data: candidateTeachersData },
+    { data: activityData },
+  ] = await Promise.all([
+    supabase.from('classes').select('id, name, is_active, created_at, locations ( name )').eq('id', classId).single(),
+    supabase.from('enrollments').select('student_id, profiles:student_id ( id, name, role )').eq('class_id', classId),
+    supabase.from('teacher_class_access').select('teacher_id, profiles:teacher_id ( id, name, role )').eq('class_id', classId),
+    isAdmin ? supabase.from('profiles').select('id, name').eq('role', 'student').order('name', { ascending: true }) : empty,
+    isAdmin ? supabase.from('profiles').select('id, name').eq('role', 'teacher').order('name', { ascending: true }) : empty,
+    supabase.rpc('get_class_student_activity', { p_class_id: classId }),
+  ])
 
   if (classError || !classData) {
     return (
@@ -46,19 +59,6 @@ export default async function ClassDetailPage(props: {
   const locRecord = Array.isArray(classData.locations) ? classData.locations[0] : classData.locations
   const locationName = (locRecord as { name?: string } | null)?.name || 'Unknown Location'
 
-  const { data: enrollmentsData, error: enrollmentsError } = await supabase
-    .from('enrollments').select('student_id, profiles:student_id ( id, name, role )').eq('class_id', classId)
-
-  const { data: teacherAccessData, error: teacherAccessError } = await supabase
-    .from('teacher_class_access').select('teacher_id, profiles:teacher_id ( id, name, role )').eq('class_id', classId)
-
-  const { data: candidateStudentsData } = await supabase
-    .from('profiles').select('id, name').eq('role', 'student').order('name', { ascending: true })
-
-  const { data: candidateTeachersData } = await supabase
-    .from('profiles').select('id, name').eq('role', 'teacher').order('name', { ascending: true })
-
-  const { data: activityData } = await supabase.rpc('get_class_student_activity', { p_class_id: classId })
   const activityById = new Map(((activityData ?? []) as StudentActivity[]).map((a) => [a.student_id, a]))
 
   const enrolledStudentIds = new Set((enrollmentsData || []).map((e) => e.student_id))
@@ -70,6 +70,7 @@ export default async function ClassDetailPage(props: {
 
   return (
     <div className="max-w-5xl space-y-8">
+      <LiveRefresh tables={['enrollments', 'focus_sessions']} />
       {/* Navigation + Header */}
       <div>
         <Link href="/dashboard/classes" className="text-sm font-medium mb-6 inline-flex items-center transition-colors hover:opacity-80" style={{ color: 'var(--ft-accent)' }}>

@@ -12,26 +12,19 @@ export default async function TeachersPage(props: {
 
   const supabase = await createClient()
 
-  const { data: teachers, error: teachersError } = await supabase
-    .from('profiles').select('id, name, role').eq('role', 'teacher').order('name', { ascending: true })
+  // One round trip: teachers (with assignment counts embedded) and students in parallel.
+  const [{ data: teacherRows, error: teachersError }, { data: students, error: studentsError }] = await Promise.all([
+    supabase.from('profiles').select('id, name, role, teacher_class_access!teacher_id ( count )').eq('role', 'teacher').order('name', { ascending: true }),
+    supabase.from('profiles').select('id, name').eq('role', 'student').order('name', { ascending: true }),
+  ])
 
-  // Fetch assignment counts for each teacher (for the demotion confirmation message)
+  // Assignment counts per teacher (for the demotion confirmation message)
   const teacherAssignmentCounts: Record<string, number> = {}
-  if (teachers && teachers.length > 0) {
-    const { data: assignments } = await supabase
-      .from('teacher_class_access')
-      .select('teacher_id')
-      .in('teacher_id', teachers.map(t => t.id))
-
-    if (assignments) {
-      for (const a of assignments) {
-        teacherAssignmentCounts[a.teacher_id] = (teacherAssignmentCounts[a.teacher_id] || 0) + 1
-      }
-    }
-  }
-
-  const { data: students, error: studentsError } = await supabase
-    .from('profiles').select('id, name').eq('role', 'student').order('name', { ascending: true })
+  const teachers = (teacherRows ?? []).map(({ teacher_class_access: tca, ...t }) => {
+    const agg = Array.isArray(tca) ? tca[0] : tca
+    teacherAssignmentCounts[t.id] = (agg as { count?: number } | null)?.count ?? 0
+    return t
+  })
 
   return (
     <div className="max-w-5xl">

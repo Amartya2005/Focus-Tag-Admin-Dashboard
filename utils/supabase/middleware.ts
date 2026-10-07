@@ -28,12 +28,12 @@ export async function updateSession(request: NextRequest) {
   )
 
   // IMPORTANT: Avoid writing any logic between createServerClient and
-  // supabase.auth.getUser(). A simple mistake could make it very hard to debug
-  // issues with users being randomly logged out.
-  
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // supabase.auth.getClaims(). getClaims() refreshes an expired session (and
+  // writes the new cookies via setAll) and verifies the JWT signature; with
+  // asymmetric signing keys this is a local check (cached JWKS) instead of a
+  // network round trip to Supabase Auth on every request.
+  const { data } = await supabase.auth.getClaims()
+  const user = data?.claims?.sub ? data.claims : null
 
   // Protect /dashboard route directly in middleware
   if (request.nextUrl.pathname.startsWith('/dashboard') && !user) {

@@ -35,11 +35,10 @@ export default async function NfcTagsPage(props: {
 
   const supabase = await createClient()
 
-  const { data: tags, error: tagsError } = await supabase
-    .from('nfc_tags').select('id, uid, is_active, created_at, locations(id, name, is_active), qr_credentials(id, credential, is_active)').order('created_at', { ascending: false })
-
-  const { data: activeLocations } = await supabase
-    .from('locations').select('id, name').eq('is_active', true).order('name', { ascending: true })
+  const [{ data: tags, error: tagsError }, { data: activeLocations }] = await Promise.all([
+    supabase.from('nfc_tags').select('id, uid, is_active, created_at, locations(id, name, is_active), qr_credentials(id, credential, is_active)').order('created_at', { ascending: false }),
+    supabase.from('locations').select('id, name').eq('is_active', true).order('name', { ascending: true }),
+  ])
 
   const sessionStatus: Record<string, boolean> =
     tags && tags.length > 0 ? await getTagSessionStatus(tags.map((t) => t.uid)) : {}

@@ -1,45 +1,25 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/utils/supabase/server'
 import { getViewer } from '@/utils/auth/role'
 import { logout } from './actions'
 import { HeaderProfile } from './HeaderProfile'
 import { ThemeToggle } from './ThemeToggle'
 import { SidebarNav } from './SidebarNav'
 import { navForRole } from './nav-config'
-import { LiveRefresh } from './LiveRefresh'
-
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const supabase = await createClient()
-
-  // 1. Get authenticated user
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    redirect('/login')
-  }
-
-  // 2. Backend-authoritative role resolution (admin or teacher only).
+  // Backend-authoritative role resolution (admin or teacher only), cached per
+  // request (React cache) and shared with pages and admin guards.
   //    Admin-only segments add their own requireAdmin() guard; RLS/RPCs remain authoritative.
   const viewer = await getViewer()
   if (!viewer) {
     redirect('/unauthorized')
   }
 
-  // 3. Fetch the institution context
-  const { data: institution } = await supabase
-    .from('institutions')
-    .select('name')
-    .eq('id', viewer.institutionId)
-    .single()
+  const institution = { name: viewer.institutionName }
 
   // Gracefully expand short acronyms for display
   const displayName =
@@ -59,7 +39,6 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex h-screen ft-bg ft-text-primary">
-      <LiveRefresh />
       <SidebarNav groups={navForRole(viewer.role)} roleLabel={roleLabel} footer={signOut} />
 
       {/* ── Main Content ── */}
@@ -78,7 +57,7 @@ export default async function DashboardLayout({
           <div className="flex items-center gap-2 shrink-0">
             <ThemeToggle />
             <HeaderProfile
-              name={viewer.name || user.email || roleLabel}
+              name={viewer.name || viewer.email || roleLabel}
               role={roleLabel}
               institutionName={displayName}
               logoutAction={logout}
