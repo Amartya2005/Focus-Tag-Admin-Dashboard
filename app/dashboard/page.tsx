@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
+import { getViewer } from '@/utils/auth/role'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -8,6 +9,8 @@ export default async function DashboardPage() {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return null
+  const viewer = await getViewer()
+  const isAdmin = viewer?.role === 'admin'
 
   const [
     { count: studentsCount },
@@ -37,27 +40,27 @@ export default async function DashboardPage() {
           Overview
         </h1>
         <p className="text-lg" style={{ color: 'var(--ft-text-secondary)' }}>
-          Manage your institution&apos;s students, teachers, classes, locations, and NFC tags.
+          {isAdmin ? <>Manage your institution&apos;s students, teachers, classes, locations, and NFC tags.</> : <>Your assigned classes, rosters, and session status.</>}
         </p>
       </div>
 
       {/* Metric cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
-        <MetricCard label="Total Students" value={studentsCount ?? 0} icon={
+        {isAdmin && <MetricCard label="Total Students" value={studentsCount ?? 0} icon={
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-        } />
-        <MetricCard label="Total Teachers" value={teachersCount ?? 0} icon={
+        } />}
+        {isAdmin && <MetricCard label="Total Teachers" value={teachersCount ?? 0} icon={
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-        } />
+        } />}
         <MetricCard label="Active Classes" value={classesCount ?? 0} icon={
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
         } />
-        <MetricCard label="Locations" value={locationsCount ?? 0} icon={
+        {isAdmin && <MetricCard label="Locations" value={locationsCount ?? 0} icon={
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-        } />
-        <MetricCard label="NFC Tags" value={nfcTagsCount ?? 0} icon={
+        } />}
+        {isAdmin && <MetricCard label="NFC Tags" value={nfcTagsCount ?? 0} icon={
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg>
-        } />
+        } />}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -134,13 +137,15 @@ export default async function DashboardPage() {
             <h2 className="text-lg font-semibold" style={{ color: 'var(--ft-text-primary)' }}>Quick Actions</h2>
           </div>
           <div className="rounded-xl border p-4 space-y-2" style={{ backgroundColor: 'var(--ft-bg-elevated)', borderColor: 'var(--ft-border)' }}>
-            {[
+            {(isAdmin ? [
               { href: '/dashboard/students', label: 'Add Student' },
               { href: '/dashboard/teachers', label: 'Add Teacher' },
               { href: '/dashboard/classes', label: 'Create Class' },
               { href: '/dashboard/locations', label: 'Add Location' },
               { href: '/dashboard/nfc-tags', label: 'Register NFC Tag' },
-            ].map(({ href, label }) => (
+            ] : [
+              { href: '/dashboard/classes', label: 'View My Classes' },
+            ]).map(({ href, label }) => (
               <Link
                 key={href}
                 href={href}
