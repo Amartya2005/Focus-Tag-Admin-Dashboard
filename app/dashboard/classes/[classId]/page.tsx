@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { enrollStudent, removeStudent, assignTeacher, revokeTeacher } from './actions'
+import { getViewer } from '@/utils/auth/role'
 
 export default async function ClassDetailPage(props: {
   params: Promise<{ classId: string }>
@@ -13,6 +14,8 @@ export default async function ClassDetailPage(props: {
   const actionSuccess = searchParams.success
 
   const supabase = await createClient()
+  const viewer = await getViewer()
+  const isAdmin = viewer?.role === 'admin'
 
   const { data: classData, error: classError } = await supabase
     .from('classes')
@@ -113,7 +116,7 @@ export default async function ClassDetailPage(props: {
           </span>
         </div>
 
-        {classData.is_active && <AddTeacherForm classId={classId} teachers={availableTeachers} />}
+        {isAdmin && classData.is_active && <AddTeacherForm classId={classId} teachers={availableTeachers} />}
 
         {teacherAccessError && (
           <div className="ft-error border rounded-md p-4 text-sm">Error loading teachers: {teacherAccessError.message}</div>
@@ -141,7 +144,7 @@ export default async function ClassDetailPage(props: {
                     <tr key={item.teacher_id} className="ft-table-row-hover transition-colors" style={{ borderTop: i > 0 ? '1px solid var(--ft-table-divider)' : undefined }}>
                       <td className="px-6 py-4 font-medium" style={{ color: 'var(--ft-text-primary)' }}>{profileName}</td>
                       <td className="px-6 py-4 font-mono text-xs" style={{ color: 'var(--ft-text-muted)' }}>{item.teacher_id}</td>
-                      <td className="px-6 py-4 text-right"><RevokeTeacherForm classId={classId} teacherId={item.teacher_id} /></td>
+                      <td className="px-6 py-4 text-right">{isAdmin && <RevokeTeacherForm classId={classId} teacherId={item.teacher_id} />}</td>
                     </tr>
                   )
                 })}
@@ -165,7 +168,7 @@ export default async function ClassDetailPage(props: {
         </div>
 
         {classData.is_active ? (
-          <EnrollStudentForm classId={classId} students={availableStudents} />
+          isAdmin ? <EnrollStudentForm classId={classId} students={availableStudents} /> : null
         ) : (
           <div className="ft-warning flex items-start gap-2 border rounded-md p-4">
             <svg className="w-4 h-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
@@ -199,7 +202,7 @@ export default async function ClassDetailPage(props: {
                     <tr key={item.student_id} className="ft-table-row-hover transition-colors" style={{ borderTop: i > 0 ? '1px solid var(--ft-table-divider)' : undefined }}>
                       <td className="px-6 py-4 font-medium" style={{ color: 'var(--ft-text-primary)' }}>{profileName}</td>
                       <td className="px-6 py-4 font-mono text-xs" style={{ color: 'var(--ft-text-muted)' }}>{item.student_id}</td>
-                      <td className="px-6 py-4 text-right"><RemoveStudentForm classId={classId} studentId={item.student_id} /></td>
+                      <td className="px-6 py-4 text-right">{isAdmin && <RemoveStudentForm classId={classId} studentId={item.student_id} />}</td>
                     </tr>
                   )
                 })}
